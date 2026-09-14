@@ -1,17 +1,6 @@
-0
-0
-0
-1
-0
-1
-1
-1
-0
-0
-0
-0
-0
-0
-0
-0
-0
+# Solution for mammalia-kangaroo-interactions
+# Objective value = 4
+4
+6
+7
+8

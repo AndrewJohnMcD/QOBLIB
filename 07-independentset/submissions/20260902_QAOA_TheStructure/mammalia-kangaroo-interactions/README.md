@@ -32,9 +32,9 @@ This directory contains the submission for the problem **mammalia-kangaroo-inter
 | ====== |  |
 | Hardware Specifications | IBM Cloud VPC cx2-4x8 (4 vCPU Intel Xeon, 8 GB RAM), Qiskit Aer 0.17.2 |
 | ====== |  |
-| Total Runtime | 28.73 s |
+| Total Runtime | 28.73 |
 | Time to Solution | N/A |
-| CPU Runtime | 28.73 s |
+| CPU Runtime | 28.73 |
 | GPU Runtime | N/A |
 | QPU Runtime | N/A |
 | Other HW Runtime | N/A |
