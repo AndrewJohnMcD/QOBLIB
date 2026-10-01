@@ -28,7 +28,7 @@ This directory contains the submission for the problem **farm**.
 | # Runs | 10 |
 | # Feasible Runs | 10 |
 | # Successful Runs | 10 |
-| Success Threshold | N/A |
+| Success Threshold | 0 |
 | ====== |  |
 | Hardware Specifications | IBM Cloud VPC cx2-4x8 (4 vCPU Intel Xeon, 8 GB RAM), Qiskit Aer 0.17.2 |
 | ====== |  |
