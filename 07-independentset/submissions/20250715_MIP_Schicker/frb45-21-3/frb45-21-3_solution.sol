@@ -1,0 +1,47 @@
+# Converted from Gurobi solution format (active variables only)
+# Solution for model obj
+# Objective value = 44
+1
+31
+45
+70
+98
+106
+154
+183
+207
+231
+233
+266
+287
+296
+335
+337
+377
+392
+419
+422
+445
+473
+496
+521
+537
+567
+577
+607
+617
+641
+662
+674
+695
+717
+748
+759
+792
+807
+827
+844
+876
+896
+909
+937

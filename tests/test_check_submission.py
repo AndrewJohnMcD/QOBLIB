@@ -45,7 +45,10 @@ def _write_ts(tmp: Path, instance: str, data: object) -> None:
 
 
 class TestObjectiveTimeSeriesMonotonicity(unittest.TestCase):
-    """validate_objective_time_series enforces per-run monotonicity."""
+    """validate_objective_time_series enforces per-run monotonicity.
+
+    Either direction is accepted (submissions use their own sign convention);
+    the direction of the runs is reported as an INFO message."""
 
     def test_minimize_valid_strictly_decreasing(self):
         with tempfile.TemporaryDirectory() as d:
@@ -74,22 +77,22 @@ class TestObjectiveTimeSeriesMonotonicity(unittest.TestCase):
             validate_objective_time_series("inst", tmp, r, minimize=True)
             self.assertTrue(r.ok)
 
-    def test_minimize_violation_detected(self):
+    def test_decreasing_run_violation_detected(self):
         with tempfile.TemporaryDirectory() as d:
             tmp = Path(d)
             _write_ts(tmp, "inst", [[
-                {"Time": 0.1, "Incumbent": 5.0},
-                {"Time": 0.5, "Incumbent": 8.0},   # goes UP — violation
+                {"Time": 0.1, "Incumbent": 9.0},
+                {"Time": 0.3, "Incumbent": 5.0},
+                {"Time": 0.5, "Incumbent": 8.0},   # goes UP after going down — violation
             ]])
             r = _report()
             validate_objective_time_series("inst", tmp, r, minimize=True)
             self.assertFalse(r.ok)
             errors = " ".join(r.messages)
-            self.assertIn("monoton", errors)
-            self.assertIn("run 1 entry 2", errors)
+            self.assertIn("breaks non-increasing monotonicity", errors)
+            self.assertIn("run 1 entry 3", errors)
             self.assertIn("5.0", errors)
             self.assertIn("8.0", errors)
-            self.assertIn("decrease", errors)
 
     def test_maximize_valid_increasing(self):
         with tempfile.TemporaryDirectory() as d:
@@ -103,33 +106,89 @@ class TestObjectiveTimeSeriesMonotonicity(unittest.TestCase):
             validate_objective_time_series("inst", tmp, r, minimize=False)
             self.assertTrue(r.ok)
 
-    def test_maximize_violation_detected(self):
+    def test_increasing_run_violation_detected(self):
         with tempfile.TemporaryDirectory() as d:
             tmp = Path(d)
             _write_ts(tmp, "inst", [[
-                {"Time": 0.1, "Incumbent": 10.0},
-                {"Time": 0.5, "Incumbent": 7.0},   # goes DOWN — violation
+                {"Time": 0.1, "Incumbent": 5.0},
+                {"Time": 0.3, "Incumbent": 10.0},
+                {"Time": 0.5, "Incumbent": 7.0},   # goes DOWN after going up — violation
             ]])
             r = _report()
             validate_objective_time_series("inst", tmp, r, minimize=False)
             self.assertFalse(r.ok)
             errors = " ".join(r.messages)
-            self.assertIn("monoton", errors)
-            self.assertIn("run 1 entry 2", errors)
-            self.assertIn("increase", errors)
+            self.assertIn("breaks non-decreasing monotonicity", errors)
+            self.assertIn("run 1 entry 3", errors)
+
+    def test_plateau_does_not_set_direction(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            _write_ts(tmp, "inst", [[
+                {"Time": 0.1, "Incumbent": 5.0},
+                {"Time": 0.3, "Incumbent": 5.0},
+                {"Time": 0.5, "Incumbent": 7.0},
+                {"Time": 0.7, "Incumbent": 7.0},
+                {"Time": 0.9, "Incumbent": 6.0},   # goes DOWN after going up — violation
+            ]])
+            r = _report()
+            validate_objective_time_series("inst", tmp, r, minimize=True)
+            self.assertFalse(r.ok)
+            self.assertIn("run 1 entry 5 breaks non-decreasing monotonicity", " ".join(r.messages))
+
+    def test_direction_opposite_to_problem_sense_is_accepted(self):
+        # A maximization problem recorded as the minimization of the negated
+        # objective: monotone, so accepted, and the direction is reported.
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            _write_ts(tmp, "inst", [[
+                {"Time": 0.1, "Incumbent": -9.0},
+                {"Time": 0.5, "Incumbent": -10.0},
+                {"Time": 1.0, "Incumbent": -12.0},
+            ]])
+            r = _report()
+            validate_objective_time_series("inst", tmp, r, minimize=False)
+            self.assertTrue(r.ok, " ".join(r.messages))
+            self.assertIn(
+                "INFO: inst_objective_time_series.json: incumbent is "
+                "non-increasing in 1 run(s) (maximization problem).",
+                r.messages,
+            )
+
+    def test_direction_reported_per_run(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            _write_ts(tmp, "inst", [
+                [{"Time": 0.1, "Incumbent": 5.0}, {"Time": 0.5, "Incumbent": 3.0}],
+                [{"Time": 0.1, "Incumbent": 4.0}, {"Time": 0.5, "Incumbent": 6.0}],
+                [{"Time": 0.1, "Incumbent": 4.0}, {"Time": 0.5, "Incumbent": 4.0}],
+                [{"Time": 0.1, "Incumbent": 7.0}],
+                [{"Time": 0.1, "Incumbent": None}],
+            ])
+            r = _report()
+            validate_objective_time_series("inst", tmp, r, minimize=True)
+            self.assertTrue(r.ok, " ".join(r.messages))
+            self.assertIn(
+                "INFO: inst_objective_time_series.json: incumbent is non-increasing in 1 run(s), "
+                "non-decreasing in 1 run(s), constant in 2 run(s) (minimization problem).",
+                r.messages,
+            )
 
     def test_multiple_runs_violation_in_second_run(self):
         with tempfile.TemporaryDirectory() as d:
             tmp = Path(d)
             _write_ts(tmp, "inst", [
                 [{"Time": 0.1, "Incumbent": 5.0}, {"Time": 0.5, "Incumbent": 3.0}],  # OK
-                [{"Time": 0.1, "Incumbent": 4.0}, {"Time": 0.5, "Incumbent": 6.0}],  # violation
+                [{"Time": 0.1, "Incumbent": 4.0}, {"Time": 0.5, "Incumbent": 6.0},
+                 {"Time": 0.9, "Incumbent": 5.0}],  # violation
             ])
             r = _report()
             validate_objective_time_series("inst", tmp, r, minimize=True)
             self.assertFalse(r.ok)
             errors = " ".join(r.messages)
-            self.assertIn("run 2 entry 2", errors)
+            self.assertIn("run 2 entry 3", errors)
+            # Only the monotone run is counted in the direction summary.
+            self.assertIn("incumbent is non-increasing in 1 run(s) (", errors)
 
     def test_single_entry_run_is_valid(self):
         with tempfile.TemporaryDirectory() as d:
@@ -138,6 +197,79 @@ class TestObjectiveTimeSeriesMonotonicity(unittest.TestCase):
             r = _report()
             validate_objective_time_series("inst", tmp, r, minimize=True)
             self.assertTrue(r.ok)
+
+
+class TestObjectiveTimeSeriesNullIncumbent(unittest.TestCase):
+    """A null 'Incumbent' means "no feasible solution yet" and is accepted
+    before the run's first incumbent (e.g. Gurobi root-relaxation log rows)."""
+
+    def test_leading_nulls_accepted(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            _write_ts(tmp, "inst", [[
+                {"Time": 0.0, "Incumbent": None},
+                {"Time": 0.0, "Incumbent": None},
+                {"Time": 0.1, "Incumbent": 16.0},
+                {"Time": 1.0, "Incumbent": 14.0},
+            ]])
+            r = _report()
+            validate_objective_time_series("inst", tmp, r, minimize=True)
+            self.assertTrue(r.ok, " ".join(r.messages))
+
+    def test_all_null_run_accepted(self):
+        # A run that never found a feasible solution is valid, just empty of
+        # incumbents.
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            _write_ts(tmp, "inst", [[
+                {"Time": 0.0, "Incumbent": None},
+                {"Time": 5.0, "Incumbent": None},
+            ]])
+            r = _report()
+            validate_objective_time_series("inst", tmp, r, minimize=True)
+            self.assertTrue(r.ok, " ".join(r.messages))
+
+    def test_null_after_incumbent_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            _write_ts(tmp, "inst", [[
+                {"Time": 0.1, "Incumbent": 16.0},
+                {"Time": 0.5, "Incumbent": None},   # lost the incumbent — impossible
+            ]])
+            r = _report()
+            validate_objective_time_series("inst", tmp, r, minimize=True)
+            self.assertFalse(r.ok)
+            errors = " ".join(r.messages)
+            self.assertIn("run 1 entry 2", errors)
+            self.assertIn("null", errors)
+
+    def test_nulls_do_not_mask_monotonicity_violation(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            _write_ts(tmp, "inst", [[
+                {"Time": 0.0, "Incumbent": None},
+                {"Time": 0.1, "Incumbent": 5.0},
+                {"Time": 0.5, "Incumbent": 8.0},
+                {"Time": 0.9, "Incumbent": 6.0},   # goes DOWN after going up — violation
+            ]])
+            r = _report()
+            validate_objective_time_series("inst", tmp, r, minimize=True)
+            self.assertFalse(r.ok)
+            self.assertIn("monoton", " ".join(r.messages))
+
+    def test_non_numeric_string_still_rejected(self):
+        # A null is "no incumbent yet"; any other non-numeric value is still an error.
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            _write_ts(tmp, "inst", [[{"Time": 0.1, "Incumbent": "n/a"}]])
+            r = _report()
+            validate_objective_time_series("inst", tmp, r, minimize=True)
+            self.assertFalse(r.ok)
+            self.assertIn("must be numeric", " ".join(r.messages))
+
+
+class TestObjectiveTimeSeriesStructure(unittest.TestCase):
+    """Structural checks that are independent of the monotonicity policy."""
 
     def test_no_file_is_informational_only(self):
         with tempfile.TemporaryDirectory() as d:
